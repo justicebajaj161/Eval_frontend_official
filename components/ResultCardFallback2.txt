@@ -1,12 +1,47 @@
-
 export default function ResultCard({ result }) {
   if (!result) return null;
 
-  // Create a normalized scoring pattern map for easy lookup
+  // Calculate total raw score from scoring pattern percentages
+  const calculateTotalRawScore = () => {
+    if (!result.evaluation_criteria.scoring_pattern) return 100; // fallback
+    
+    // Find the first component score that's not a percentage (if any)
+    const hasRawScores = result.evaluation_criteria.scoring_pattern.some(
+      item => item.max_score > 100
+    );
+    
+    if (hasRawScores) {
+      // If scores are already in raw format, return sum
+      return result.evaluation_criteria.scoring_pattern.reduce(
+        (sum, item) => sum + item.max_score, 0
+      );
+    }
+    
+    // Calculate total raw score from component ratios
+    const componentRatios = result.analysis.component_evaluations?.map(comp => {
+      const patternItem = result.evaluation_criteria.scoring_pattern.find(
+        p => p.component.trim().toLowerCase() === comp.component.trim().toLowerCase()
+      );
+      return patternItem ? comp.score / patternItem.max_score : 1;
+    }) || [];
+    
+    if (componentRatios.length === 0) return 100; // fallback
+    
+    // Find the most consistent ratio (avoid outliers)
+    const averageRatio = componentRatios.reduce((sum, ratio) => sum + ratio, 0) / componentRatios.length;
+    return Math.round(100 / averageRatio);
+  };
+
+  const totalRawScore = calculateTotalRawScore();
+
+  // Create a scoring pattern map with both percentage and raw scores
   const scoringPatternMap = {};
   result.evaluation_criteria.scoring_pattern.forEach(item => {
     const normalizedKey = item.component.trim().toLowerCase().replace(/\s+/g, ' ');
-    scoringPatternMap[normalizedKey] = item.max_score;
+    scoringPatternMap[normalizedKey] = {
+      percentage: item.max_score,
+      raw: Math.round((item.max_score / 100) * totalRawScore)
+    };
   });
 
   if (result.analysis.status === "rejected") {
@@ -43,6 +78,9 @@ export default function ResultCard({ result }) {
     );
   }
 
+  // Calculate raw score from percentage
+  const rawScore = Math.round((result.analysis.score / 100) * totalRawScore);
+
   return (
     <div className="space-y-6">
       <div className="p-6 bg-white rounded-lg shadow">
@@ -50,7 +88,10 @@ export default function ResultCard({ result }) {
         
         <div className="flex items-center mb-4">
           <div className="text-4xl font-bold mr-4">
-            {result.analysis.score}/100
+            {rawScore}/{totalRawScore}
+            <div className="text-sm font-normal text-gray-500">
+              ({result.analysis.score}%)
+            </div>
           </div>
           <div>
             <div className="w-full bg-gray-200 rounded-full h-4">
@@ -72,16 +113,23 @@ export default function ResultCard({ result }) {
         {result.analysis.component_evaluations?.map((component, index) => {
           // Normalize component name for comparison
           const normalizedComponentName = component.component.trim().toLowerCase().replace(/\s+/g, ' ');
-          const maxScore = scoringPatternMap[normalizedComponentName] || 
-                         result.evaluation_criteria.scoring_pattern[index]?.max_score || 
-                         '?';
+          const patternData = scoringPatternMap[normalizedComponentName] || 
+                           { percentage: '?', raw: '?' };
+
+          // Calculate raw component score
+          const rawComponentScore = Math.round(
+            (component.score / patternData.percentage) * patternData.raw
+          );
 
           return (
             <div key={index} className="mb-4 pb-4 border-b last:border-b-0">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="font-medium">{component.component}</h3>
                 <span className="font-bold">
-                  {component.score}/{maxScore}
+                  {rawComponentScore}/{patternData.raw}
+                  <div className="text-sm font-normal text-gray-500">
+                    ({component.score}%)
+                  </div>
                 </span>
               </div>
               <p className="text-sm text-gray-600 mb-1">
