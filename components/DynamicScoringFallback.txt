@@ -11,7 +11,9 @@ export default function DynamicScoring() {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { component: '', max_score: 0 }]);
+    if (totalScore < 100) {
+      setRows([...rows, { component: '', max_score: 0 }]);
+    }
   };
 
   const removeRow = (index) => {
@@ -29,26 +31,12 @@ export default function DynamicScoring() {
   };
 
   useEffect(() => {
-    // Calculate percentage scores and store in localStorage
-    if (totalScore > 0) {
-      const scoringPattern = rows.map(row => ({
-        component: row.component,
-        max_score: Math.round((row.max_score / totalScore) * 100) // Convert to percentage
-      }));
-      localStorage.setItem('scoring_pattern', JSON.stringify(scoringPattern));
-    } else {
-      localStorage.setItem('scoring_pattern', JSON.stringify([]));
-    }
-  }, [rows, totalScore]);
-
-  const calculatePercentage = (score) => {
-    if (totalScore === 0) return 0;
-    return Math.round((score / totalScore) * 100);
-  };
+    localStorage.setItem('scoring_pattern', JSON.stringify(rows));
+  }, [rows]);
 
   return (
     <div className="mb-6">
-      <h2 className="text-xl font-semibold mb-4">Scoring Pattern (Total: {totalScore} marks)</h2>
+      <h2 className="text-xl font-semibold mb-4">Scoring Pattern (Total: {totalScore}/100)</h2>
       
       {rows.map((row, index) => (
         <div key={index} className="flex gap-4 mb-3 items-end">
@@ -71,15 +59,9 @@ export default function DynamicScoring() {
               onChange={(e) => handleChange(index, 'max_score', e.target.value)}
               className="w-full p-2 border rounded"
               min="0"
+              max={100 - totalScore + (Number(row.max_score) || 0)}
               required
             />
-          </div>
-
-          <div className="w-24">
-            <label className="block mb-1">Percentage</label>
-            <div className="w-full p-2 border rounded bg-gray-100">
-              {calculatePercentage(row.max_score)}%
-            </div>
           </div>
           
           <button
@@ -97,9 +79,16 @@ export default function DynamicScoring() {
         type="button"
         onClick={addRow}
         className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+        disabled={totalScore >= 100}
       >
         Add Component
       </button>
+      
+      {totalScore !== 100 && (
+        <p className="text-red-500 mt-2">
+          Total score must equal 100 (currently {totalScore})
+        </p>
+      )}
     </div>
   );
 }
